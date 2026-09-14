@@ -17,6 +17,10 @@ import { EstimatesModule } from './estimates/estimates.module.js';
 import { InvoicesModule } from './invoices/invoices.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { SaleOrdersModule } from './sale-orders/sale-orders.module.js';
+import { SuppliersModule } from './suppliers/suppliers.module.js';
+import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module.js';
+import { PurchaseBillsModule } from './purchase-bills/purchase-bills.module.js';
+import { SupplierPaymentsModule } from './supplier-payments/supplier-payments.module.js';
 import { DelegationTasksModule } from './delegation-tasks/delegation-tasks.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { AuditLogModule } from './audit-log/audit-log.module.js';
@@ -40,6 +44,10 @@ import { DataExportModule } from './data-export/data-export.module.js';
     InvoicesModule,
     PaymentsModule,
     SaleOrdersModule,
+    SuppliersModule,
+    PurchaseOrdersModule,
+    PurchaseBillsModule,
+    SupplierPaymentsModule,
     DelegationTasksModule,
     ReportsModule,
     AuditLogModule,

@@ -236,3 +236,43 @@ export const voidPaymentSchema = z.object({
   reason: z.string().min(1),
 });
 export type VoidPaymentInput = z.infer<typeof voidPaymentSchema>;
+
+// Purchase side (2026-09-14) — mirrors the Customer/Invoice/Payment shapes
+// on the sales side. See PurchasesModule.
+export const supplierSchema = z.object({
+  name: z.string().min(1),
+  phone: z.string().min(10).max(15).optional(),
+  gstin: z.string().min(15).max(15).optional(),
+  address: z.string().optional(),
+});
+export type SupplierInput = z.infer<typeof supplierSchema>;
+
+// Same shape as invoiceLineItemSchema — inventoryItemId optional for a
+// non-stock line (e.g. freight/handling charged on the bill).
+export const purchaseLineItemSchema = z.object({
+  inventoryItemId: z.string().min(1).optional(),
+  description: z.string().min(1),
+  qty: z.number().int().min(1),
+  unitPrice: z.number().int().min(0), // paise
+  gstRate: z.number().int().min(0).max(10000), // basis points
+});
+export type PurchaseLineItemInput = z.infer<typeof purchaseLineItemSchema>;
+
+// Tally-style Purchase Order — a pre-bill supplier commitment, mirrors
+// SaleOrder. See PurchaseOrdersService.
+export const purchaseOrderSchema = z.object({
+  supplierId: z.string().min(1),
+  lineItems: z.array(purchaseLineItemSchema).min(1),
+  discount: z.number().int().min(0).default(0), // paise
+});
+export type PurchaseOrderInput = z.infer<typeof purchaseOrderSchema>;
+
+// Unlike Invoice, a PurchaseBill is single-stage: recorded once and stock
+// moves immediately, no DRAFT/FINAL split — see PurchaseBillsService.
+export const createPurchaseBillSchema = z.object({
+  supplierId: z.string().min(1),
+  billNumber: z.string().min(1).optional(), // supplier's own reference — free text, not sequential
+  lineItems: z.array(purchaseLineItemSchema).min(1),
+  discount: z.number().int().min(0).default(0), // paise
+});
+export type CreatePurchaseBillInput = z.infer<typeof createPurchaseBillSchema>;

@@ -22,7 +22,7 @@ export default async function globalSetup() {
   const prisma = new PrismaClient({ adapter });
 
   await prisma.$executeRawUnsafe(
-    `TRUNCATE TABLE "bsms"."UserPersona", "bsms"."Attendance", "bsms"."ServicePartUsed", "bsms"."InvoiceLineItem", "bsms"."Invoice", "bsms"."Estimate", "bsms"."ServiceTicket", "bsms"."Bike", "bsms"."Customer", "bsms"."InventoryItem", "bsms"."DelegationTask", "bsms"."AuditLog", "bsms"."User", "bsms"."GstSlab", "bsms"."ShowroomProfile" CASCADE`,
+    `TRUNCATE TABLE "bsms"."UserPersona", "bsms"."Attendance", "bsms"."ServicePartUsed", "bsms"."InvoiceLineItem", "bsms"."Invoice", "bsms"."Estimate", "bsms"."ServiceTicket", "bsms"."Bike", "bsms"."Customer", "bsms"."InventoryItem", "bsms"."Supplier", "bsms"."DelegationTask", "bsms"."AuditLog", "bsms"."User", "bsms"."GstSlab", "bsms"."ShowroomProfile" CASCADE`,
   );
 
   await prisma.showroomProfile.create({

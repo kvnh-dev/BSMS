@@ -83,6 +83,9 @@ model User {
   invoicesAsCashier   Invoice[]
   paymentsRecorded    Payment[]
   saleOrdersCreated   SaleOrder[]
+  purchaseOrdersCreated   PurchaseOrder[]
+  purchaseBillsRecorded   PurchaseBill[]
+  supplierPaymentsRecorded SupplierPayment[]
   tasksAssigned       DelegationTask[] @relation("AssignedTasks")
   tasksReviewed       DelegationTask[] @relation("ReviewedTasks")
   auditLogs           AuditLog[]
@@ -142,6 +145,8 @@ model InventoryItem {
   partsUsed         ServicePartUsed[]
   lineItems         InvoiceLineItem[]
   saleOrderLineItems SaleOrderLineItem[]
+  purchaseOrderLineItems PurchaseOrderLineItem[]
+  purchaseBillLineItems  PurchaseBillLineItem[]
 
   @@index([hsnCode])
   @@index([category])
@@ -362,6 +367,118 @@ model SaleOrderLineItem {
   unitFactor      Int     @default(1) // saleUnitFactor snapshotted at time of order
   unitLabel       String? // resolved sale unit label at time of order, e.g. "Bottle"
 
+  @@schema("bsms")
+}
+
+/// Purchase side (2026-09-14) — mirrors Customer/SaleOrder/Invoice/Payment,
+/// see the Tally-gap roadmap plan §Phase 2. A received PurchaseBill
+/// increases InventoryItem.stockQty immediately (no DRAFT/FINAL split like
+/// Invoice — a purchase bill is recorded once and stock moves right away).
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  gstin     String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  purchaseOrders PurchaseOrder[]
+  purchaseBills  PurchaseBill[]
+
+  @@index([phone])
+  @@schema("bsms")
+}
+
+/// Tally-style Purchase Order: a pre-bill supplier commitment. Deliberately
+/// does NOT touch stock — that only happens once converted into a real
+/// PurchaseBill (see PurchaseOrdersService.convert, which hands off to
+/// PurchaseBillsService.create). A cancelled or never-converted order has no
+/// accounting effect — direct mirror of SaleOrder.
+model PurchaseOrder {
+  id              String                  @id @default(cuid())
+  status          String                  @default("OPEN") // OPEN | CONVERTED | CANCELLED
+  supplierId      String
+  supplier        Supplier                @relation(fields: [supplierId], references: [id])
+  lineItems       PurchaseOrderLineItem[]
+  gstBreakup      Json // { cgstPaise, sgstPaise, igstPaise }
+  discount        Int                     @default(0) // paise
+  total           Int // paise
+  createdById     String
+  createdBy       User                    @relation(fields: [createdById], references: [id])
+  purchaseBillId  String?                 @unique // set once converted
+  purchaseBill    PurchaseBill?           @relation(fields: [purchaseBillId], references: [id])
+  createdAt       DateTime                @default(now())
+
+  @@schema("bsms")
+}
+
+model PurchaseOrderLineItem {
+  id              String         @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id])
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  description     String
+  qty             Int
+  unitPrice       Int // paise
+  gstRate         Int // basis points
+  unitFactor      Int     @default(1) // purchaseUnitFactor snapshotted at time of order
+  unitLabel       String? // resolved purchase unit label at time of order
+
+  @@schema("bsms")
+}
+
+model PurchaseBill {
+  id              String                 @id @default(cuid())
+  billNumber      String? // supplier's own reference — free text, not sequential like Invoice
+  supplierId      String
+  supplier        Supplier               @relation(fields: [supplierId], references: [id])
+  purchaseOrder   PurchaseOrder?
+  lineItems       PurchaseBillLineItem[]
+  payments        SupplierPayment[]
+  gstBreakup      Json // { cgstPaise, sgstPaise, igstPaise }
+  discount        Int                    @default(0) // paise
+  total           Int // paise
+  recordedById    String
+  recordedBy      User                   @relation(fields: [recordedById], references: [id])
+  createdAt       DateTime               @default(now())
+
+  @@index([createdAt])
+  @@schema("bsms")
+}
+
+model PurchaseBillLineItem {
+  id              String         @id @default(cuid())
+  purchaseBillId  String
+  purchaseBill    PurchaseBill   @relation(fields: [purchaseBillId], references: [id])
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  description     String
+  qty             Int
+  unitPrice       Int // paise
+  gstRate         Int // basis points
+  unitFactor      Int     @default(1) // purchaseUnitFactor snapshotted at time of bill
+  unitLabel       String? // resolved purchase unit label at time of bill
+
+  @@schema("bsms")
+}
+
+/// paidAmount/balanceDue computed the same way as Payment vs Invoice —
+/// summed from non-voided SupplierPayment.amount, never stored.
+model SupplierPayment {
+  id             String       @id @default(cuid())
+  purchaseBillId String
+  purchaseBill   PurchaseBill @relation(fields: [purchaseBillId], references: [id])
+  amount         Int // paise
+  mode           String // CASH | UPI | CARD | BANK_TRANSFER | CHEQUE | OTHER
+  reference      String?
+  voided         Boolean      @default(false)
+  voidedReason   String?
+  recordedById   String
+  recordedBy     User         @relation(fields: [recordedById], references: [id])
+  createdAt      DateTime     @default(now())
+
+  @@index([purchaseBillId])
   @@schema("bsms")
 }
 

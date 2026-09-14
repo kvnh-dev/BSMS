@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { lineItemGstAmount, lineItemTaxableValue } from '@bsms/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
+import { SupplierPaymentsService } from '../supplier-payments/supplier-payments.service.js';
 
 // Unlike attendance.service.ts's same-named helpers (which deliberately
 // build a Date.UTC(local components) value for consistent @db.Date storage
@@ -48,6 +49,7 @@ export class ReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly payments: PaymentsService,
+    private readonly supplierPayments: SupplierPaymentsService,
   ) {}
 
   // Every FINAL invoice with a non-zero balance due, oldest first — the
@@ -132,6 +134,12 @@ export class ReportsService {
 
     const outstandingReceivablesPaise = (finalInvoicesTotal._sum.total ?? 0) - (paidTotal._sum.amount ?? 0);
 
+    const [purchaseBillsTotal, supplierPaidTotal] = await Promise.all([
+      this.prisma.purchaseBill.aggregate({ _sum: { total: true } }),
+      this.prisma.supplierPayment.aggregate({ where: { voided: false }, _sum: { amount: true } }),
+    ]);
+    const payablesPaise = (purchaseBillsTotal._sum.total ?? 0) - (supplierPaidTotal._sum.amount ?? 0);
+
     const trendByDay = new Map<string, number>();
     const trendDayOfWeek = new Map<string, number>();
     for (let i = 0; i < TREND_DAYS; i++) {
@@ -210,6 +218,7 @@ export class ReportsService {
       lowStockItems,
       salesTrend,
       outstandingReceivablesPaise,
+      payablesPaise,
     };
   }
 
