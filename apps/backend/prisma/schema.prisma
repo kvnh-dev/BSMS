@@ -1,0 +1,398 @@
+// Dev/current-phase schema: PostgreSQL, dedicated `bsms` schema in the
+// shared local Postgres instance (see TECH_STACK.md "Local dev setup").
+// Model definitions are written to the SQLite-compatible subset (see
+// DATABASE_SCHEMA.md) so this same file becomes the Postgres half of the
+// eventual dual-provider setup with minimal changes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Connection URL for migrations lives in prisma.config.ts (Prisma 7 no
+// longer accepts `url` here). Runtime PrismaClient uses the @prisma/adapter-pg
+// driver adapter instead — see src/prisma/prisma.service.ts.
+datasource db {
+  provider = "postgresql"
+  schemas  = ["bsms"]
+}
+
+/// Single row for now (single showroom). Becomes a normal multi-row
+/// table if multi-branch is ever built — see plan §9 open items.
+model ShowroomProfile {
+  id            String   @id @default(cuid())
+  name          String
+  logoUrl       String?
+  address       String
+  contactNumber String
+  email         String
+  gstin         String
+  pan           String
+  state         String
+  invoicePrefix String // e.g. "SHW"
+  invoiceSeq    Int      @default(0) // incremented atomically per invoice
+  currency      String   @default("INR")
+  locale        String   @default("en-IN")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@schema("bsms")
+}
+
+/// Configurable GST rate presets, so the Owner/inventory manager picks a
+/// slab per item instead of the app hardcoding one default. Seeded on
+/// first run with the standard Indian slabs.
+model GstSlab {
+  id        String   @id @default(cuid())
+  label     String // e.g. "Standard - Two-wheelers", "Spare parts"
+  rate      Int // basis points, e.g. 2800 = 28.00%
+  isDefault Boolean  @default(false) // pre-selected in "Add Inventory Item"
+  createdAt DateTime @default(now())
+
+  @@index([isDefault])
+  @@schema("bsms")
+}
+
+/// Added 2026-09-12 — a managed list for inventory categories (previously
+/// free text on InventoryItem.category, which stays free text: this is a
+/// UI convenience for picking/pre-filling a category and its default GST
+/// rate, not a foreign key, same reasoning as GstSlab above — see
+/// DATABASE_SCHEMA.md addition #4/#6.
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  gstRate   Int // basis points — default GST rate pre-filled when this category is picked
+  createdAt DateTime @default(now())
+
+  @@schema("bsms")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  phone        String   @unique
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  personas            UserPersona[]
+  attendances         Attendance[]
+  ticketsAsTechnician ServiceTicket[]  @relation("TechnicianTickets")
+  ticketsDelivered    ServiceTicket[]  @relation("DeliveredTickets")
+  estimatesCreated    Estimate[]
+  invoicesAsCashier   Invoice[]
+  paymentsRecorded    Payment[]
+  saleOrdersCreated   SaleOrder[]
+  tasksAssigned       DelegationTask[] @relation("AssignedTasks")
+  tasksReviewed       DelegationTask[] @relation("ReviewedTasks")
+  auditLogs           AuditLog[]
+
+  @@schema("bsms")
+}
+
+/// Replaces Persona[] (arrays aren't portable to SQLite). A staff account
+/// can hold multiple personas, per plan §1.
+model UserPersona {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+  persona String // one of: OWNER | TECHNICIAN | CASHIER | DELIVERY | AUDITOR
+
+  @@unique([userId, persona])
+  @@index([persona])
+  @@schema("bsms")
+}
+
+model Attendance {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  date      DateTime  @db.Date
+  checkIn   DateTime
+  checkOut  DateTime?
+
+  @@index([userId, date])
+  @@schema("bsms")
+}
+
+model InventoryItem {
+  id           String   @id @default(cuid())
+  name         String
+  category     String
+  hsnCode      String
+  gstRate      Int // basis points, e.g. 1800 = 18.00%
+  unitPrice    Int // paise — price per saleUnit (baseUnit if saleUnit is unset)
+  stockQty     Int      @default(0) // always denominated in baseUnit
+  reorderPoint Int      @default(0)
+  sku          String?  @unique
+  barcode      String?  @unique
+  // Unit-of-measure: stock is always tracked in baseUnit. purchaseUnit/
+  // saleUnit are optional alternate units for restocking/selling — when
+  // unset, they fall back to baseUnit with factor 1, so existing items are
+  // unaffected. Int factors only (no fractional ratios) and no separate
+  // units master — free-text names, matching Tally's ad hoc unit entry.
+  baseUnit           String   @default("PCS")
+  purchaseUnit       String?
+  purchaseUnitFactor Int      @default(1)
+  saleUnit           String?
+  saleUnitFactor     Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  partsUsed         ServicePartUsed[]
+  lineItems         InvoiceLineItem[]
+  saleOrderLineItems SaleOrderLineItem[]
+
+  @@index([hsnCode])
+  @@index([category])
+  @@schema("bsms")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String
+  address   String?
+  createdAt DateTime @default(now())
+
+  bikes      Bike[]
+  invoices   Invoice[]
+  saleOrders SaleOrder[]
+
+  @@index([phone])
+  @@schema("bsms")
+}
+
+model Bike {
+  id         String   @id @default(cuid())
+  regNo      String   @unique
+  chassisNo  String   @unique
+  model      String
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  serviceTickets ServiceTicket[]
+
+  @@schema("bsms")
+}
+
+model ServiceTicket {
+  id             String   @id @default(cuid())
+  bikeId         String
+  bike           Bike     @relation(fields: [bikeId], references: [id])
+  technicianId   String?
+  technician     User?    @relation("TechnicianTickets", fields: [technicianId], references: [id])
+  complaint      String
+  estimateAmount Int? // paise
+  actualAmount   Int? // paise
+  status         String   @default("INTAKE") // INTAKE | APPROVED | IN_SERVICE | BILLED | DELIVERED
+  // Captured once, when status transitions to DELIVERED (see
+  // ServiceTicketsService.updateStatus) — never inferred from updatedAt,
+  // which gets overwritten by any later edit.
+  deliveredById  String?
+  deliveredBy    User?    @relation("DeliveredTickets", fields: [deliveredById], references: [id])
+  deliveredAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  partsUsed      ServicePartUsed[]
+  serviceCharges ServiceCharge[]
+  estimate       Estimate?
+  invoice        Invoice?
+
+  @@index([status])
+  @@schema("bsms")
+}
+
+model ServicePartUsed {
+  id              String        @id @default(cuid())
+  ticketId        String
+  ticket          ServiceTicket @relation(fields: [ticketId], references: [id])
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  qty             Int
+  priceAtUse      Int // paise, captured at time of use
+  gstRateAtUse    Int // basis points, captured at time of use — so billing never
+  // depends on the inventory item's *current* rate, only what was actually charged
+  unitFactor Int     @default(1) // saleUnitFactor snapshotted at time of use
+  unitLabel  String? // resolved sale unit label at time of use, e.g. "Bottle"
+  createdAt DateTime @default(now())
+
+  @@schema("bsms")
+}
+
+/// Labor/service charges actually recorded during servicing — distinct from
+/// Estimate (a pre-work quote shown to the customer, doesn't affect billing)
+/// and from ServicePartUsed (parts). Invoices for a ticket are generated
+/// from partsUsed + serviceCharges, never from the Estimate directly — see
+/// InvoicesService.create() and the 2026-09-12 workflow fix.
+model ServiceCharge {
+  id          String        @id @default(cuid())
+  ticketId    String
+  ticket      ServiceTicket @relation(fields: [ticketId], references: [id])
+  description String
+  amount      Int // paise
+  gstRate     Int // basis points
+  createdAt   DateTime      @default(now())
+
+  @@schema("bsms")
+}
+
+model Estimate {
+  id          String        @id @default(cuid())
+  ticketId    String        @unique
+  ticket      ServiceTicket @relation(fields: [ticketId], references: [id])
+  lineItems   Json // [{ description, qty, unitPricePaise, gstRateBps }]
+  gstBreakup  Json // { cgstPaise, sgstPaise, igstPaise }
+  discount    Int           @default(0) // paise
+  createdById String
+  createdBy   User          @relation(fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+
+  @@schema("bsms")
+}
+
+model Invoice {
+  id            String            @id @default(cuid())
+  // Null while DRAFT — a sequential GST invoice number is only assigned at
+  // Finalize, so an abandoned/discarded draft never burns a number and
+  // leaves a gap. See InvoicesService.finalize() (2026-09-13).
+  invoiceNumber String?           @unique
+  status        String            @default("DRAFT") // DRAFT | FINAL
+  finalizedAt   DateTime?
+  ticketId      String?           @unique // null for a standalone sale
+  ticket        ServiceTicket?    @relation(fields: [ticketId], references: [id])
+  customerId    String
+  customer      Customer          @relation(fields: [customerId], references: [id])
+  lineItems     InvoiceLineItem[]
+  gstBreakup    Json // { cgstPaise, sgstPaise, igstPaise }
+  // Snapshot of ShowroomProfile at the moment this invoice was *finalized*
+  // (not drafted) — { name, address, gstin, pan, state, contactNumber }. A
+  // later profile edit (e.g. renaming the showroom) must never change what
+  // an already-issued invoice displays, so this is never re-read from
+  // ShowroomProfile live. Null while DRAFT. See InvoicesService.finalize().
+  sellerSnapshot Json?
+  discount      Int               @default(0) // paise
+  total         Int // paise
+  cashierId     String
+  cashier       User              @relation(fields: [cashierId], references: [id])
+  createdAt     DateTime          @default(now())
+  saleOrder     SaleOrder?
+  payments      Payment[]
+
+  @@index([createdAt])
+  @@schema("bsms")
+}
+
+/// paidAmount/balanceDue are deliberately NOT stored fields — they're
+/// computed in PaymentsService by summing non-voided Payment.amount, the
+/// same "derive, don't duplicate" reasoning as Estimate vs actual billed
+/// work: one source of truth, no drift risk between a stored total and the
+/// payments that supposedly add up to it.
+model Payment {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id])
+  amount       Int // paise
+  mode         String // CASH | UPI | CARD | BANK_TRANSFER | CHEQUE | OTHER
+  reference    String? // UPI txn id / cheque no — optional
+  // Voided, never deleted — same immutability precedent as Invoice.revise():
+  // a mistaken payment stays in the record with an explanation, rather than
+  // disappearing.
+  voided       Boolean  @default(false)
+  voidedReason String?
+  recordedById String
+  recordedBy   User     @relation(fields: [recordedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([invoiceId])
+  @@schema("bsms")
+}
+
+/// Added beyond the original plan — see DATABASE_SCHEMA.md.
+model InvoiceLineItem {
+  id              String         @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice        @relation(fields: [invoiceId], references: [id])
+  inventoryItemId String? // null if it's a labor/service charge line, not a part
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  description     String
+  qty             Int
+  unitPrice       Int // paise
+  gstRate         Int // basis points
+  unitFactor      Int     @default(1) // saleUnitFactor snapshotted at time of sale
+  unitLabel       String? // resolved sale unit label at time of sale, e.g. "Bottle"
+
+  @@schema("bsms")
+}
+
+/// Tally-style Sales Order: a pre-invoice customer commitment (2026-09-13).
+/// Deliberately does NOT touch stock or GST invoice numbering — that only
+/// happens once converted into a real Invoice (see SaleOrdersService.convert,
+/// which hands off to the existing InvoicesService.create/finalize flow
+/// unchanged). A cancelled or never-converted order has no accounting effect.
+model SaleOrder {
+  id          String              @id @default(cuid())
+  status      String              @default("OPEN") // OPEN | CONVERTED | CANCELLED
+  customerId  String
+  customer    Customer            @relation(fields: [customerId], references: [id])
+  lineItems   SaleOrderLineItem[]
+  gstBreakup  Json // { cgstPaise, sgstPaise, igstPaise }
+  discount    Int                 @default(0) // paise
+  total       Int // paise
+  createdById String
+  createdBy   User                @relation(fields: [createdById], references: [id])
+  invoiceId   String?             @unique // set once converted
+  invoice     Invoice?            @relation(fields: [invoiceId], references: [id])
+  createdAt   DateTime            @default(now())
+
+  @@schema("bsms")
+}
+
+model SaleOrderLineItem {
+  id              String         @id @default(cuid())
+  saleOrderId     String
+  saleOrder       SaleOrder      @relation(fields: [saleOrderId], references: [id])
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  description     String
+  qty             Int
+  unitPrice       Int // paise
+  gstRate         Int // basis points
+  unitFactor      Int     @default(1) // saleUnitFactor snapshotted at time of order
+  unitLabel       String? // resolved sale unit label at time of order, e.g. "Bottle"
+
+  @@schema("bsms")
+}
+
+model DelegationTask {
+  id           String    @id @default(cuid())
+  assignedToId String
+  assignedTo   User      @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  taskType     String // e.g. "INVENTORY_EDIT", "DISCOUNT_OVERRIDE"
+  payload      Json // the requested change, shape depends on taskType
+  status       String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewedById String?
+  reviewedBy   User?     @relation("ReviewedTasks", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([status])
+  @@schema("bsms")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id])
+  action    String // e.g. "INVENTORY_UPDATE", "INVOICE_CREATE"
+  entity    String // e.g. "InventoryItem"
+  entityId  String
+  before    Json?
+  after     Json?
+  timestamp DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([timestamp])
+  @@schema("bsms")
+}

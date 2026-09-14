@@ -1,0 +1,16 @@
+import { Controller, Get } from '@nestjs/common';
+import { AppService } from './app.service.js';
+import { Public } from './auth/public.decorator.js';
+
+@Controller()
+export class AppController {
+  constructor(private readonly appService: AppService) {}
+
+  // Public health-check route — a monitoring/uptime check hitting "/"
+  // shouldn't need a JWT.
+  @Public()
+  @Get()
+  getHello(): string {
+    return this.appService.getHello();
+  }
+}

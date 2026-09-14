@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Env files (contain secrets/local connection strings)
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# Shared package build output (rebuilt via `npm run build --workspace=packages/shared`)
+packages/shared/dist/
+
+# Prisma
+apps/backend/src/generated/
+
+# Test/coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Editor
+.vscode/
+.idea/
