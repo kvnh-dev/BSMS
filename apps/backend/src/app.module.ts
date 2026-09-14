@@ -20,6 +20,7 @@ import { SaleOrdersModule } from './sale-orders/sale-orders.module.js';
 import { DelegationTasksModule } from './delegation-tasks/delegation-tasks.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { AuditLogModule } from './audit-log/audit-log.module.js';
+import { DataExportModule } from './data-export/data-export.module.js';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { AuditLogModule } from './audit-log/audit-log.module.js';
     DelegationTasksModule,
     ReportsModule,
     AuditLogModule,
+    DataExportModule,
   ],
   controllers: [AppController],
   providers: [AppService],

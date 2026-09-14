@@ -12,6 +12,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { FormField } from '@/components/form-field';
 import { api, ApiError } from '@/lib/api-client';
 
+function downloadBackup() {
+  return api.get<Record<string, unknown>>('/data-export/all').then((data) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bsms-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
 const editableProfileSchema = showroomProfileSchema.omit({ logoUrl: true, currency: true, locale: true });
 type EditableProfile = {
   name: string;
@@ -59,6 +71,12 @@ export default function ShowroomProfilePage() {
       toast.success('Showroom profile updated');
     },
     onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed to update profile'),
+  });
+
+  const backupMutation = useMutation({
+    mutationFn: downloadBackup,
+    onSuccess: () => toast.success('Backup downloaded'),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed to download backup'),
   });
 
   if (isLoading) {
@@ -125,6 +143,24 @@ export default function ShowroomProfilePage() {
               {saveMutation.isPending ? 'Saving…' : 'Save changes'}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-xl w-full mx-auto mt-6">
+        <CardHeader>
+          <CardTitle>Data backup</CardTitle>
+          <CardDescription>
+            Download every customer, bike, invoice, payment, and other business record as one JSON file.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="outline"
+            onClick={() => backupMutation.mutate()}
+            disabled={backupMutation.isPending}
+          >
+            {backupMutation.isPending ? 'Preparing…' : 'Download backup'}
+          </Button>
         </CardContent>
       </Card>
     </div>
