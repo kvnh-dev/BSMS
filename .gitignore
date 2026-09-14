@@ -34,3 +34,13 @@ npm-debug.log*
 # Editor
 .vscode/
 .idea/
+
+# Planning/reference docs — local working notes, not repo documentation
+/bike-showroom-implementation-plan.pdf
+/DATABASE_SCHEMA.md
+/INSTALLATION_UX.md
+/KEYBOARD_SHORTCUTS.md
+/MOBILE_APP_PLAN.md
+/TECH_STACK.md
+/UX_DESIGN_PRINCIPLES.md
+/WEB_APP_PLAN.md
