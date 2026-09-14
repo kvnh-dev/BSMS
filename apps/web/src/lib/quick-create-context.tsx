@@ -2,7 +2,14 @@
 
 import { createContext, useContext, useRef, type ReactNode } from 'react';
 
-export type QuickCreateEntity = 'customer' | 'inventory-item' | 'category' | 'gst-slab' | 'technician' | 'bike';
+export type QuickCreateEntity =
+  | 'customer'
+  | 'inventory-item'
+  | 'category'
+  | 'gst-slab'
+  | 'technician'
+  | 'bike'
+  | 'supplier';
 
 export interface QuickCreateTarget {
   entity: QuickCreateEntity;

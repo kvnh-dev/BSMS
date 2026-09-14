@@ -7,7 +7,7 @@ import { createContext, useContext, useCallback, useState, type ReactNode } from
 // F9) that the owner asked for the same pause-and-resume treatment as the
 // three real vouchers — so it shares this store rather than getting a
 // separate, parallel mechanism for what is otherwise identical behavior.
-export type VoucherType = 'sale-order' | 'invoice' | 'service-ticket' | 'bike';
+export type VoucherType = 'sale-order' | 'invoice' | 'service-ticket' | 'bike' | 'purchase-order' | 'purchase-bill';
 
 export interface VoucherDraft {
   id: string;

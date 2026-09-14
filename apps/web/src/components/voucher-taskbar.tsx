@@ -8,6 +8,8 @@ const BASE_PATH: Record<VoucherType, string> = {
   invoice: '/invoices/new',
   'service-ticket': '/service-tickets/new',
   bike: '/bikes/new',
+  'purchase-order': '/purchase-orders/new',
+  'purchase-bill': '/purchase-bills/new',
 };
 
 // Tally-style multi-tasking taskbar: shows every in-progress, not-yet-saved

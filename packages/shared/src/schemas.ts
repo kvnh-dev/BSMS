@@ -239,10 +239,15 @@ export type VoidPaymentInput = z.infer<typeof voidPaymentSchema>;
 
 // Purchase side (2026-09-14) — mirrors the Customer/Invoice/Payment shapes
 // on the sales side. See PurchasesModule.
+// An untouched optional text input submits '' (not undefined), which would
+// otherwise fail min-length validation on phone/gstin — preprocess treats
+// '' the same as "not provided" so the form's natural empty state validates.
+const optionalTrimmed = (schema: z.ZodString) =>
+  z.preprocess((v) => (v === '' ? undefined : v), schema.optional());
 export const supplierSchema = z.object({
   name: z.string().min(1),
-  phone: z.string().min(10).max(15).optional(),
-  gstin: z.string().min(15).max(15).optional(),
+  phone: optionalTrimmed(z.string().min(10).max(15)),
+  gstin: optionalTrimmed(z.string().min(15).max(15)),
   address: z.string().optional(),
 });
 export type SupplierInput = z.infer<typeof supplierSchema>;

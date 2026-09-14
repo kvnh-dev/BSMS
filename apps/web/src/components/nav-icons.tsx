@@ -67,6 +67,37 @@ export function SaleOrderIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function SuppliersIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M4 21V8l8-5 8 5v13" />
+      <path d="M4 21h16" />
+      <path d="M9 21v-6h6v6" />
+    </Icon>
+  );
+}
+
+export function PurchaseOrderIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3v11" />
+      <path d="M7.5 10.5 12 15l4.5-4.5" />
+      <path d="M4 19h16" />
+    </Icon>
+  );
+}
+
+export function PurchaseBillIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M6 3h9l3 3v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
+      <path d="M9 16h6" />
+      <path d="M9.5 9.5 12 12l2.5-2.5" />
+      <path d="M12 7v5" />
+    </Icon>
+  );
+}
+
 export function DeliveryIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>

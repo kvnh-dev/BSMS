@@ -21,6 +21,7 @@ interface DashboardSummary {
   lowStockItems: { id: string; name: string; stockQty: number; reorderPoint: number }[];
   salesTrend: { label: string; totalPaise: number }[];
   outstandingReceivablesPaise: number;
+  payablesPaise: number;
 }
 
 const STATUS_DOT: Record<string, string> = {
@@ -209,7 +210,7 @@ export default function DashboardPage() {
 
       <div>
         <div className="mb-3 text-[14.5px] font-bold">Today’s Overview</div>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-6">
           <Card className="flex flex-col gap-3 p-5">
             <div className="text-[13px] font-semibold text-muted-foreground">Outstanding receivables</div>
             <div
@@ -223,6 +224,22 @@ export default function DashboardPage() {
             </div>
             <Link href="/reports/receivables" className="text-[12px] text-muted-foreground hover:underline">
               View receivables
+            </Link>
+          </Card>
+
+          <Card className="flex flex-col gap-3 p-5">
+            <div className="text-[13px] font-semibold text-muted-foreground">Payables</div>
+            <div
+              className={
+                summary.payablesPaise > 0
+                  ? 'text-[26px] font-extrabold tracking-tight text-destructive'
+                  : 'text-[26px] font-extrabold tracking-tight'
+              }
+            >
+              {formatPaiseAsInr(summary.payablesPaise)}
+            </div>
+            <Link href="/purchase-bills" className="text-[12px] text-muted-foreground hover:underline">
+              View purchase bills
             </Link>
           </Card>
 

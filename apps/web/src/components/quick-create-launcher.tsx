@@ -9,6 +9,7 @@ import { QuickAddCategorySheet } from '@/components/quick-add-category-sheet';
 import { QuickAddGstSlabSheet } from '@/components/quick-add-gst-slab-sheet';
 import { QuickAddWorkerSheet } from '@/components/quick-add-worker-sheet';
 import { QuickAddBikeSheet } from '@/components/quick-add-bike-sheet';
+import { QuickAddSupplierSheet } from '@/components/quick-add-supplier-sheet';
 
 // Real Tally Alt+C: fires while a picker field is focused, creates the
 // master that field expects, right there — no menu. Does nothing outside a
@@ -69,6 +70,11 @@ export function QuickCreateLauncher() {
       />
       <QuickAddBikeSheet
         open={activeEntity === 'bike'}
+        onOpenChange={(o) => !o && close()}
+        onCreated={handleCreated}
+      />
+      <QuickAddSupplierSheet
+        open={activeEntity === 'supplier'}
         onOpenChange={(o) => !o && close()}
         onCreated={handleCreated}
       />

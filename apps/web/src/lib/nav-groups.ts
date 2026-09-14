@@ -16,6 +16,9 @@ import {
   ShowroomProfileIcon,
   KeyboardIcon,
   CategoryIcon,
+  SuppliersIcon,
+  PurchaseOrderIcon,
+  PurchaseBillIcon,
 } from '@/components/nav-icons';
 
 export interface NavItem {
@@ -46,6 +49,9 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: '/delivery', label: 'Delivery', icon: DeliveryIcon, personas: ['OWNER', 'DELIVERY'] },
       { href: '/inventory', label: 'Inventory', icon: InventoryIcon },
       { href: '/attendance', label: 'Attendance', icon: AttendanceIcon },
+      { href: '/suppliers', label: 'Suppliers', icon: SuppliersIcon, personas: ['OWNER', 'CASHIER'] },
+      { href: '/purchase-orders', label: 'Purchase Orders', icon: PurchaseOrderIcon, personas: ['OWNER', 'CASHIER'] },
+      { href: '/purchase-bills', label: 'Purchase Bills', icon: PurchaseBillIcon, personas: ['OWNER', 'CASHIER'] },
     ],
   },
   {

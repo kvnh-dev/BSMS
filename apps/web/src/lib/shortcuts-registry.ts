@@ -69,6 +69,15 @@ export const SHORTCUTS: ShortcutEntry[] = [
       return customerId ? { key: 'customerId', value: customerId } : null;
     },
   },
+  {
+    combo: 'F10',
+    label: 'New Purchase Bill',
+    href: '/purchase-bills/new',
+    contextParam: (pathname) => {
+      const supplierId = idFromPath(pathname, '/suppliers');
+      return supplierId ? { key: 'supplierId', value: supplierId } : null;
+    },
+  },
   { combo: 'Ctrl+K', label: 'Go To — search & jump', action: 'open-go-to' },
   { combo: 'Alt+G', label: 'Go To — search & jump', action: 'open-go-to' },
   { combo: 'Ctrl+M', label: 'Home / Dashboard', action: 'navigate-home' },
