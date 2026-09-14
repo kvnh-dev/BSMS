@@ -67,6 +67,7 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: 'Insights',
     items: [
       { href: '/reports', label: 'Reports', icon: ReportsIcon, personas: ['OWNER', 'AUDITOR'] },
+      { href: '/reports/receivables', label: 'Receivables', icon: InvoiceIcon, personas: ['OWNER', 'AUDITOR'] },
       { href: '/audit-log', label: 'Audit Log', icon: AuditLogIcon, personas: ['OWNER', 'AUDITOR'] },
     ],
   },

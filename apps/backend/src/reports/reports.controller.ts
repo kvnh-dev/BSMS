@@ -15,6 +15,11 @@ export class ReportsController {
     return this.reports.dashboardSummary(period === 'day' ? 'day' : 'month');
   }
 
+  @Get('receivables')
+  receivables() {
+    return this.reports.receivables();
+  }
+
   @Get('gst-export')
   gstExport(@Query('from') from?: string, @Query('to') to?: string) {
     const now = new Date();

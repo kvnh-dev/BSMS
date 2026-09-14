@@ -17,6 +17,9 @@ const STATUS_STYLES: Record<string, string> = {
   OPEN: 'bg-accent text-accent-foreground',
   CONVERTED: 'bg-success-soft text-success',
   CANCELLED: 'bg-destructive/10 text-destructive',
+  PAID: 'bg-success-soft text-success',
+  PARTIAL: 'bg-warning-soft text-warning',
+  UNPAID: 'bg-destructive/10 text-destructive',
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {

@@ -16,16 +16,20 @@ import {
   lineItemGstAmount,
   type EditInvoiceLineItemsInput,
 } from '@bsms/shared';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { FormField } from '@/components/form-field';
 import { StatusBadge } from '@/components/status-badge';
 import { PrintIcon } from '@/components/nav-icons';
 import { Breadcrumb } from '@/components/breadcrumb';
 import { BarcodeScanInput, type ScannedInventoryItem } from '@/components/barcode-scan-input';
+import { RecordPaymentSheet } from '@/components/record-payment-sheet';
 import { api, ApiError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { useRegisterQuickCreateTarget } from '@/lib/quick-create-context';
@@ -62,6 +66,19 @@ interface InvoiceDetail {
   sellerSnapshot: SellerSnapshot | null;
   discount: number;
   total: number;
+  paidAmount: number;
+  balanceDue: number;
+}
+
+interface Payment {
+  id: string;
+  amount: number;
+  mode: string;
+  reference: string | null;
+  voided: boolean;
+  voidedReason: string | null;
+  createdAt: string;
+  recordedBy: { name: string };
 }
 
 interface InventoryItem {
@@ -357,10 +374,36 @@ function DraftView({
 
 function FinalView({ invoice, isOwner }: { invoice: InvoiceDetail; isOwner: boolean }) {
   const seller = invoice.sellerSnapshot!;
+  const queryClient = useQueryClient();
+  const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
+  const [voidTarget, setVoidTarget] = useState<Payment | null>(null);
+  const [voidReason, setVoidReason] = useState('');
   const taxable = invoice.lineItems.reduce(
     (sum, l) => sum + lineItemTaxableValue({ qty: l.qty, unitPricePaise: l.unitPrice, gstRateBps: l.gstRate }),
     0,
   );
+
+  const { data: payments } = useQuery({
+    queryKey: ['invoices', invoice.id, 'payments'],
+    queryFn: () => api.get<Payment[]>(`/invoices/${invoice.id}/payments`),
+  });
+
+  const voidMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api.patch(`/payments/${id}/void`, { reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices', invoice.id] });
+      queryClient.invalidateQueries({ queryKey: ['invoices', invoice.id, 'payments'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success('Payment voided');
+      setVoidTarget(null);
+      setVoidReason('');
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Failed to void payment'),
+  });
+
+  const balanceLabel = invoice.balanceDue <= 0 ? 'Paid in full' : formatPaiseAsInr(invoice.balanceDue);
 
   return (
     <div className="flex flex-col gap-3">
@@ -380,6 +423,100 @@ function FinalView({ invoice, isOwner }: { invoice: InvoiceDetail; isOwner: bool
           </Button>
         </div>
       </div>
+
+      <Card className="max-w-3xl w-full mx-auto print:hidden">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Payments</CardTitle>
+          <div className="flex items-center gap-3">
+            <span
+              className={
+                invoice.balanceDue <= 0 ? 'text-success font-semibold text-sm' : 'text-destructive font-semibold text-sm'
+              }
+            >
+              Balance due: {balanceLabel}
+            </span>
+            {invoice.balanceDue > 0 && (
+              <Button size="sm" onClick={() => setPaymentSheetOpen(true)}>
+                Record payment
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {payments && payments.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Reference</TableHead>
+                  <TableHead>Recorded by</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  {isOwner && <TableHead className="text-right">Action</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payments.map((p) => (
+                  <TableRow key={p.id} className={p.voided ? 'opacity-50' : undefined}>
+                    <TableCell>{new Date(p.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>{p.mode.replace('_', ' ')}</TableCell>
+                    <TableCell>{p.reference ?? '—'}</TableCell>
+                    <TableCell>{p.recordedBy.name}</TableCell>
+                    <TableCell className="text-right">
+                      {formatPaiseAsInr(p.amount)}
+                      {p.voided && <span className="ml-1.5 text-xs text-destructive">(voided)</span>}
+                    </TableCell>
+                    {isOwner && (
+                      <TableCell className="text-right">
+                        {!p.voided && (
+                          <Button variant="ghost" size="sm" onClick={() => setVoidTarget(p)}>
+                            Void
+                          </Button>
+                        )}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground">No payments recorded yet.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <RecordPaymentSheet
+        open={paymentSheetOpen}
+        onOpenChange={setPaymentSheetOpen}
+        invoiceId={invoice.id}
+        balanceDue={invoice.balanceDue}
+      />
+
+      <Dialog open={!!voidTarget} onOpenChange={(open) => !open && setVoidTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Void payment</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">
+              This marks the {voidTarget && formatPaiseAsInr(voidTarget.amount)} payment as voided and restores it to
+              the balance due. It&apos;s logged to the audit trail and can&apos;t be undone.
+            </p>
+            <FormField label="Reason">
+              <Input value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="e.g. Recorded in error" />
+            </FormField>
+            <DialogFooter>
+              <Button
+                variant="destructive"
+                disabled={!voidReason || voidMutation.isPending}
+                onClick={() => voidTarget && voidMutation.mutate({ id: voidTarget.id, reason: voidReason })}
+              >
+                {voidMutation.isPending ? 'Voiding…' : 'Void payment'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="mx-auto w-full max-w-3xl bg-card text-card-foreground ring-1 ring-foreground/10 rounded-xl p-8 text-sm print:max-w-none print:rounded-none print:ring-0 print:p-0">
         <div className="text-center border-b-2 border-foreground/80 pb-3 mb-3">

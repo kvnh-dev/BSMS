@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { lineItemGstAmount, lineItemTaxableValue } from '@bsms/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PaymentsService } from '../payments/payments.service.js';
 
 // Unlike attendance.service.ts's same-named helpers (which deliberately
 // build a Date.UTC(local components) value for consistent @db.Date storage
@@ -44,7 +45,36 @@ function localDateKey(d: Date): string {
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly payments: PaymentsService,
+  ) {}
+
+  // Every FINAL invoice with a non-zero balance due, oldest first — the
+  // "who owes me money" view. balanceDue is computed the same way
+  // InvoicesService does it (never stored), just batched for the whole list.
+  async receivables() {
+    const invoices = await this.prisma.invoice.findMany({
+      where: { status: 'FINAL' },
+      include: { customer: { select: { name: true, phone: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    const paidByInvoice = await this.payments.totalsPaidForInvoices(invoices.map((i) => i.id));
+    return invoices
+      .map((invoice) => {
+        const paidAmount = paidByInvoice.get(invoice.id) ?? 0;
+        return {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          customer: invoice.customer,
+          createdAt: invoice.createdAt,
+          total: invoice.total,
+          paidAmount,
+          balanceDue: invoice.total - paidAmount,
+        };
+      })
+      .filter((invoice) => invoice.balanceDue > 0);
+  }
 
   async dashboardSummary(technicianPeriod: 'day' | 'month' = 'month') {
     const today = startOfToday();
@@ -62,6 +92,8 @@ export class ReportsService {
       pendingCounts,
       attendanceToday,
       allInventory,
+      finalInvoicesTotal,
+      paidTotal,
     ] = await Promise.all([
         this.prisma.invoice.aggregate({ where: { createdAt: { gte: today } }, _sum: { total: true } }),
         this.prisma.invoice.findMany({ where: { createdAt: { gte: monthStart } }, select: { gstBreakup: true, total: true } }),
@@ -94,7 +126,11 @@ export class ReportsService {
         // fetches every item's two int columns and compares in JS below —
         // the same trade-off the inventory list page already makes.
         this.prisma.inventoryItem.findMany({ select: { id: true, name: true, stockQty: true, reorderPoint: true } }),
+        this.prisma.invoice.aggregate({ where: { status: 'FINAL' }, _sum: { total: true } }),
+        this.prisma.payment.aggregate({ where: { voided: false, invoice: { status: 'FINAL' } }, _sum: { amount: true } }),
       ]);
+
+    const outstandingReceivablesPaise = (finalInvoicesTotal._sum.total ?? 0) - (paidTotal._sum.amount ?? 0);
 
     const trendByDay = new Map<string, number>();
     const trendDayOfWeek = new Map<string, number>();
@@ -173,6 +209,7 @@ export class ReportsService {
       workersToday,
       lowStockItems,
       salesTrend,
+      outstandingReceivablesPaise,
     };
   }
 

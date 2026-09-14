@@ -20,6 +20,7 @@ interface DashboardSummary {
   workersToday: { userId: string; name: string; checkIn: string; checkOut: string | null; isCheckedIn: boolean }[];
   lowStockItems: { id: string; name: string; stockQty: number; reorderPoint: number }[];
   salesTrend: { label: string; totalPaise: number }[];
+  outstandingReceivablesPaise: number;
 }
 
 const STATUS_DOT: Record<string, string> = {
@@ -208,7 +209,23 @@ export default function DashboardPage() {
 
       <div>
         <div className="mb-3 text-[14.5px] font-bold">Today’s Overview</div>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+          <Card className="flex flex-col gap-3 p-5">
+            <div className="text-[13px] font-semibold text-muted-foreground">Outstanding receivables</div>
+            <div
+              className={
+                summary.outstandingReceivablesPaise > 0
+                  ? 'text-[26px] font-extrabold tracking-tight text-destructive'
+                  : 'text-[26px] font-extrabold tracking-tight'
+              }
+            >
+              {formatPaiseAsInr(summary.outstandingReceivablesPaise)}
+            </div>
+            <Link href="/reports/receivables" className="text-[12px] text-muted-foreground hover:underline">
+              View receivables
+            </Link>
+          </Card>
+
           <Card className="flex flex-col gap-3 p-5">
             <div className="text-[13px] font-semibold text-muted-foreground">Workers today</div>
             {summary.workersToday.length === 0 ? (

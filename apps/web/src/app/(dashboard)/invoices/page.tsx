@@ -16,8 +16,16 @@ interface Invoice {
   invoiceNumber: string | null;
   status: string;
   total: number;
+  paidAmount: number;
+  balanceDue: number;
   createdAt: string;
   customer: { name: string };
+}
+
+function paymentStatus(inv: Invoice): 'PAID' | 'PARTIAL' | 'UNPAID' {
+  if (inv.balanceDue <= 0) return 'PAID';
+  if (inv.paidAmount > 0) return 'PARTIAL';
+  return 'UNPAID';
 }
 
 export default function InvoicesPage() {
@@ -57,6 +65,7 @@ export default function InvoicesPage() {
               <TableHead>Status</TableHead>
               <TableHead>Date</TableHead>
               <TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-right">Balance</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -81,11 +90,21 @@ export default function InvoicesPage() {
                 </TableCell>
                 <TableCell>{new Date(inv.createdAt).toLocaleDateString()}</TableCell>
                 <TableCell className="text-right">{formatPaiseAsInr(inv.total)}</TableCell>
+                <TableCell className="text-right">
+                  {inv.status === 'FINAL' ? (
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span>{formatPaiseAsInr(inv.balanceDue)}</span>
+                      <StatusBadge status={paymentStatus(inv)} />
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
             {invoices?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                   No invoices yet.
                 </TableCell>
               </TableRow>
