@@ -1,10 +1,14 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Persona, RecordPaymentInput } from '@bsms/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { LedgerService } from '../ledger/ledger.service.js';
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ledger: LedgerService,
+  ) {}
 
   async record(invoiceId: string, recordedById: string, input: RecordPaymentInput) {
     const invoice = await this.prisma.invoice.findUnique({ where: { id: invoiceId } });
@@ -12,9 +16,16 @@ export class PaymentsService {
     if (invoice.status !== 'FINAL') {
       throw new BadRequestException('Only a finalized invoice can receive a payment');
     }
-    return this.prisma.payment.create({
-      data: { invoiceId, amount: input.amount, mode: input.mode, reference: input.reference, recordedById },
-      include: { recordedBy: { select: { name: true } } },
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.create({
+        data: { invoiceId, amount: input.amount, mode: input.mode, reference: input.reference, recordedById },
+        include: { recordedBy: { select: { name: true } } },
+      });
+      await this.ledger.post(tx, 'PAYMENT', payment.id, [
+        { account: 'Cash/Bank', debit: input.amount },
+        { account: 'Sundry Debtors', credit: input.amount },
+      ]);
+      return payment;
     });
   }
 
@@ -52,6 +63,11 @@ export class PaymentsService {
           after: { voided: true, voidedReason: reason },
         },
       });
+      // Exact reverse of the original PAYMENT posting.
+      await this.ledger.post(tx, 'PAYMENT_VOID', id, [
+        { account: 'Sundry Debtors', debit: payment.amount },
+        { account: 'Cash/Bank', credit: payment.amount },
+      ]);
       return voided;
     });
   }

@@ -281,3 +281,14 @@ export const createPurchaseBillSchema = z.object({
   discount: z.number().int().min(0).default(0), // paise
 });
 export type CreatePurchaseBillInput = z.infer<typeof createPurchaseBillSchema>;
+
+// Manual expense entry (2026-09-14, Phase 3 ledger) — the one place a human
+// posts directly, Owner-only. accountId is required, not defaulted here: the
+// frontend pre-fills the Select to "Indirect Expenses" from GET
+// /ledger/accounts, so there's no backend default-resolution-by-name magic.
+export const expenseSchema = z.object({
+  accountId: z.string().min(1),
+  amount: z.number().int().positive(), // paise
+  narration: z.string().min(1),
+});
+export type ExpenseInput = z.infer<typeof expenseSchema>;

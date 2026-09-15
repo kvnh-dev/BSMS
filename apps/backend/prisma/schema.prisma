@@ -482,6 +482,40 @@ model SupplierPayment {
   @@schema("bsms")
 }
 
+/// Minimal ledger (2026-09-14, Phase 3) — a small, fixed, seeded set of
+/// accounts (see LedgerService.seedIfEmpty) that Invoice/Payment/
+/// PurchaseBill/SupplierPayment transactions auto-post to, plus manual
+/// expense entries. Not a user-editable chart of accounts — no CRUD.
+model Account {
+  id            String        @id @default(cuid())
+  name          String        @unique
+  type          String // ASSET | LIABILITY | INCOME | EXPENSE | EQUITY
+  ledgerEntries LedgerEntry[]
+
+  @@schema("bsms")
+}
+
+/// No FK back onto Invoice/PurchaseBill/Payment/SupplierPayment — sourceType
+/// + sourceId stays a loose string reference, same convention as
+/// AuditLog.entity/entityId, so this model never forces a migration on any
+/// of those tables. A posting's multiple legs (e.g. Dr Sundry Debtors / Cr
+/// Sales / Cr GST Payable for one invoice) share the same sourceId.
+model LedgerEntry {
+  id         String   @id @default(cuid())
+  accountId  String
+  account    Account  @relation(fields: [accountId], references: [id])
+  debit      Int      @default(0) // paise
+  credit     Int      @default(0) // paise
+  date       DateTime @default(now())
+  sourceType String // INVOICE | INVOICE_REVISE | PAYMENT | PAYMENT_VOID | PURCHASE_BILL | SUPPLIER_PAYMENT | SUPPLIER_PAYMENT_VOID | MANUAL_EXPENSE
+  sourceId   String // originating record's id; a fresh id for MANUAL_EXPENSE, which has no backing record
+  narration  String?
+
+  @@index([accountId, date])
+  @@index([sourceType, sourceId])
+  @@schema("bsms")
+}
+
 model DelegationTask {
   id           String    @id @default(cuid())
   assignedToId String

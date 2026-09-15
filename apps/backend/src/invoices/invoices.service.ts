@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import {
   calcGstBreakup,
   calcInvoiceTotal,
+  lineItemTaxableValue,
   type CreateInvoiceInput,
   type EditInvoiceLineItemsInput,
   type LineItemInput,
@@ -10,6 +11,7 @@ import {
 } from '@bsms/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PaymentsService } from '../payments/payments.service.js';
+import { LedgerService } from '../ledger/ledger.service.js';
 
 interface ResolvedLine extends LineItemInput {
   description: string;
@@ -27,6 +29,7 @@ export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly payments: PaymentsService,
+    private readonly ledger: LedgerService,
   ) {}
 
   // paidAmount/balanceDue are computed here, not stored on Invoice — see
@@ -284,8 +287,11 @@ export class InvoicesService {
         }
       }
 
-      const gstBreakup = calcGstBreakup(lines) as unknown as Prisma.InputJsonValue;
+      const gstBreakupRaw = calcGstBreakup(lines);
+      const gstBreakup = gstBreakupRaw as unknown as Prisma.InputJsonValue;
       const total = calcInvoiceTotal(lines, invoice.discount);
+      const taxable = lines.reduce((sum, l) => sum + lineItemTaxableValue(l), 0);
+      const gst = gstBreakupRaw.cgstPaise + gstBreakupRaw.sgstPaise;
 
       const profile = await tx.showroomProfile.findFirstOrThrow();
       const nextSeq = profile.invoiceSeq + 1;
@@ -336,6 +342,15 @@ export class InvoicesService {
       if (ticket) {
         await tx.serviceTicket.update({ where: { id: ticket.id }, data: { status: 'BILLED', actualAmount: total } });
       }
+
+      await this.ledger.post(tx, 'INVOICE', id, [
+        { account: 'Sundry Debtors', debit: total, narration: invoiceNumber },
+        ...(invoice.discount > 0
+          ? [{ account: 'Discount Allowed' as const, debit: invoice.discount, narration: invoiceNumber }]
+          : []),
+        { account: 'Sales', credit: taxable, narration: invoiceNumber },
+        { account: 'GST Payable', credit: gst, narration: invoiceNumber },
+      ]);
 
       return finalized;
     });
@@ -401,8 +416,11 @@ export class InvoicesService {
         gstRateBps: l.gstRate,
         inventoryItemId: l.inventoryItemId,
       }));
-      const gstBreakup = calcGstBreakup(lines) as unknown as Prisma.InputJsonValue;
+      const gstBreakupRaw = calcGstBreakup(lines);
+      const gstBreakup = gstBreakupRaw as unknown as Prisma.InputJsonValue;
       const total = calcInvoiceTotal(lines, input.discount);
+      const newTaxable = lines.reduce((sum, l) => sum + lineItemTaxableValue(l), 0);
+      const newGst = gstBreakupRaw.cgstPaise + gstBreakupRaw.sgstPaise;
       lines = await this.attachUnitInfo(tx, lines);
 
       await tx.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
@@ -441,6 +459,34 @@ export class InvoicesService {
           after: { lineItems: input.lineItems, discount: input.discount, total },
         },
       });
+
+      // Reverse the original finalize() posting using the OLD numbers, then
+      // post fresh with the new ones — two always-positive-amount postings
+      // rather than a signed delta, so there's no sign-juggling to get
+      // wrong. Each balances independently (see the ledger plan's discount
+      // math): before.total + before.discount == oldTaxable + oldGst, and
+      // total + input.discount == newTaxable + newGst.
+      const oldLines = before.lineItems.map((l) => ({ qty: l.qty, unitPricePaise: l.unitPrice, gstRateBps: l.gstRate }));
+      const oldGstBreakup = calcGstBreakup(oldLines);
+      const oldGst = oldGstBreakup.cgstPaise + oldGstBreakup.sgstPaise;
+      const oldTaxable = oldLines.reduce((sum, l) => sum + lineItemTaxableValue(l), 0);
+
+      await this.ledger.post(tx, 'INVOICE_REVISE', id, [
+        { account: 'Sales', debit: oldTaxable, narration: 'Revision reversal' },
+        { account: 'GST Payable', debit: oldGst, narration: 'Revision reversal' },
+        ...(before.discount > 0
+          ? [{ account: 'Discount Allowed' as const, credit: before.discount, narration: 'Revision reversal' }]
+          : []),
+        { account: 'Sundry Debtors', credit: before.total, narration: 'Revision reversal' },
+      ]);
+      await this.ledger.post(tx, 'INVOICE_REVISE', id, [
+        { account: 'Sundry Debtors', debit: total, narration: 'Revision' },
+        ...(input.discount > 0
+          ? [{ account: 'Discount Allowed' as const, debit: input.discount, narration: 'Revision' }]
+          : []),
+        { account: 'Sales', credit: newTaxable, narration: 'Revision' },
+        { account: 'GST Payable', credit: newGst, narration: 'Revision' },
+      ]);
 
       return revised;
     });

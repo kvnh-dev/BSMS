@@ -1,8 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { calcGstBreakup, calcInvoiceTotal, type CreatePurchaseBillInput, type PurchaseLineItemInput } from '@bsms/shared';
+import {
+  calcGstBreakup,
+  calcInvoiceTotal,
+  lineItemTaxableValue,
+  type CreatePurchaseBillInput,
+  type PurchaseLineItemInput,
+} from '@bsms/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SupplierPaymentsService } from '../supplier-payments/supplier-payments.service.js';
+import { LedgerService } from '../ledger/ledger.service.js';
 
 interface ResolvedLine extends PurchaseLineItemInput {
   unitFactor: number;
@@ -14,6 +21,7 @@ export class PurchaseBillsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly payments: SupplierPaymentsService,
+    private readonly ledger: LedgerService,
   ) {}
 
   // paidAmount/balanceDue computed here, never stored — same "derive, don't
@@ -75,8 +83,11 @@ export class PurchaseBillsService {
         unitPricePaise: l.unitPrice,
         gstRateBps: l.gstRate,
       }));
-      const gstBreakup = calcGstBreakup(lines) as unknown as Prisma.InputJsonValue;
+      const gstBreakupRaw = calcGstBreakup(lines);
+      const gstBreakup = gstBreakupRaw as unknown as Prisma.InputJsonValue;
       const total = calcInvoiceTotal(lines, input.discount);
+      const taxable = lines.reduce((sum, l) => sum + lineItemTaxableValue(l), 0);
+      const gst = gstBreakupRaw.cgstPaise + gstBreakupRaw.sgstPaise;
       const resolvedLines = await this.attachUnitInfo(tx, input.lineItems);
 
       for (const line of resolvedLines) {
@@ -88,7 +99,7 @@ export class PurchaseBillsService {
         });
       }
 
-      return tx.purchaseBill.create({
+      const bill = await tx.purchaseBill.create({
         data: {
           billNumber: input.billNumber,
           supplierId: input.supplierId,
@@ -110,6 +121,19 @@ export class PurchaseBillsService {
         },
         include: { lineItems: true, supplier: true },
       });
+
+      // No revise path exists for PurchaseBill ("recorded once"), so unlike
+      // Invoice there's no reversal case to handle here.
+      await this.ledger.post(tx, 'PURCHASE_BILL', bill.id, [
+        { account: 'Purchases', debit: taxable, narration: bill.billNumber ?? undefined },
+        { account: 'GST Receivable', debit: gst, narration: bill.billNumber ?? undefined },
+        ...(input.discount > 0
+          ? [{ account: 'Discount Received' as const, credit: input.discount, narration: bill.billNumber ?? undefined }]
+          : []),
+        { account: 'Sundry Creditors', credit: total, narration: bill.billNumber ?? undefined },
+      ]);
+
+      return bill;
     });
   }
 }

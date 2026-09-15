@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Persona, RecordPaymentInput } from '@bsms/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { LedgerService } from '../ledger/ledger.service.js';
 
 // Direct mirror of PaymentsService, against PurchaseBill instead of
 // Invoice — a PurchaseBill has no DRAFT/FINAL split, so unlike
@@ -8,14 +9,24 @@ import { PrismaService } from '../prisma/prisma.service.js';
 // receive a payment.
 @Injectable()
 export class SupplierPaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ledger: LedgerService,
+  ) {}
 
   async record(purchaseBillId: string, recordedById: string, input: RecordPaymentInput) {
     const bill = await this.prisma.purchaseBill.findUnique({ where: { id: purchaseBillId } });
     if (!bill) throw new NotFoundException('Purchase bill not found');
-    return this.prisma.supplierPayment.create({
-      data: { purchaseBillId, amount: input.amount, mode: input.mode, reference: input.reference, recordedById },
-      include: { recordedBy: { select: { name: true } } },
+    return this.prisma.$transaction(async (tx) => {
+      const payment = await tx.supplierPayment.create({
+        data: { purchaseBillId, amount: input.amount, mode: input.mode, reference: input.reference, recordedById },
+        include: { recordedBy: { select: { name: true } } },
+      });
+      await this.ledger.post(tx, 'SUPPLIER_PAYMENT', payment.id, [
+        { account: 'Sundry Creditors', debit: input.amount },
+        { account: 'Cash/Bank', credit: input.amount },
+      ]);
+      return payment;
     });
   }
 
@@ -50,6 +61,11 @@ export class SupplierPaymentsService {
           after: { voided: true, voidedReason: reason },
         },
       });
+      // Exact reverse of the original SUPPLIER_PAYMENT posting.
+      await this.ledger.post(tx, 'SUPPLIER_PAYMENT_VOID', id, [
+        { account: 'Cash/Bank', debit: payment.amount },
+        { account: 'Sundry Creditors', credit: payment.amount },
+      ]);
       return voided;
     });
   }

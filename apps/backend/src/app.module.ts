@@ -25,6 +25,8 @@ import { DelegationTasksModule } from './delegation-tasks/delegation-tasks.modul
 import { ReportsModule } from './reports/reports.module.js';
 import { AuditLogModule } from './audit-log/audit-log.module.js';
 import { DataExportModule } from './data-export/data-export.module.js';
+import { LedgerModule } from './ledger/ledger.module.js';
+import { ExpensesModule } from './expenses/expenses.module.js';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { DataExportModule } from './data-export/data-export.module.js';
     ReportsModule,
     AuditLogModule,
     DataExportModule,
+    LedgerModule,
+    ExpensesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

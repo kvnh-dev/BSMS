@@ -19,6 +19,8 @@ import {
   SuppliersIcon,
   PurchaseOrderIcon,
   PurchaseBillIcon,
+  LedgerIcon,
+  ExpensesIcon,
 } from '@/components/nav-icons';
 
 export interface NavItem {
@@ -74,6 +76,8 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { href: '/reports', label: 'Reports', icon: ReportsIcon, personas: ['OWNER', 'AUDITOR'] },
       { href: '/reports/receivables', label: 'Receivables', icon: InvoiceIcon, personas: ['OWNER', 'AUDITOR'] },
+      { href: '/ledger', label: 'Ledger', icon: LedgerIcon, personas: ['OWNER', 'AUDITOR'] },
+      { href: '/ledger/expenses', label: 'Expenses', icon: ExpensesIcon, personas: ['OWNER', 'AUDITOR'] },
       { href: '/audit-log', label: 'Audit Log', icon: AuditLogIcon, personas: ['OWNER', 'AUDITOR'] },
     ],
   },

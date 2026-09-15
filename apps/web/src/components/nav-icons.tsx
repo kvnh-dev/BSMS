@@ -155,6 +155,27 @@ export function ReportsIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function LedgerIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3v18" />
+      <path d="M5 7h14" />
+      <path d="M5 7 3 12a2.5 2.5 0 0 0 5 0L5 7Z" />
+      <path d="M19 7l-2 5a2.5 2.5 0 0 0 5 0l-2-5Z" />
+    </Icon>
+  );
+}
+
+export function ExpensesIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <rect x="2.5" y="6" width="19" height="13" rx="2" />
+      <path d="M2.5 10h19" />
+      <path d="M16 14.5h2.5" />
+    </Icon>
+  );
+}
+
 export function AuditLogIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>

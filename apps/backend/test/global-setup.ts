@@ -1,6 +1,7 @@
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { SEEDED_ACCOUNTS } from '../src/ledger/ledger.constants.js';
 
 // Runs once before the whole e2e suite (see vitest.config.e2e.ts's
 // TEST_DATABASE_URL) — truncates the isolated test database and seeds a
@@ -22,7 +23,7 @@ export default async function globalSetup() {
   const prisma = new PrismaClient({ adapter });
 
   await prisma.$executeRawUnsafe(
-    `TRUNCATE TABLE "bsms"."UserPersona", "bsms"."Attendance", "bsms"."ServicePartUsed", "bsms"."InvoiceLineItem", "bsms"."Invoice", "bsms"."Estimate", "bsms"."ServiceTicket", "bsms"."Bike", "bsms"."Customer", "bsms"."InventoryItem", "bsms"."Supplier", "bsms"."DelegationTask", "bsms"."AuditLog", "bsms"."User", "bsms"."GstSlab", "bsms"."ShowroomProfile" CASCADE`,
+    `TRUNCATE TABLE "bsms"."UserPersona", "bsms"."Attendance", "bsms"."ServicePartUsed", "bsms"."InvoiceLineItem", "bsms"."Invoice", "bsms"."Estimate", "bsms"."ServiceTicket", "bsms"."Bike", "bsms"."Customer", "bsms"."InventoryItem", "bsms"."Supplier", "bsms"."Account", "bsms"."DelegationTask", "bsms"."AuditLog", "bsms"."User", "bsms"."GstSlab", "bsms"."ShowroomProfile" CASCADE`,
   );
 
   await prisma.showroomProfile.create({
@@ -45,6 +46,8 @@ export default async function globalSetup() {
       { label: 'Standard - Two-wheelers (28%)', rate: 2800, isDefault: true },
     ],
   });
+
+  await prisma.account.createMany({ data: [...SEEDED_ACCOUNTS] });
 
   const passwordHash = await bcrypt.hash(TEST_PASSWORD, 12);
   for (const user of Object.values(TEST_USERS)) {
